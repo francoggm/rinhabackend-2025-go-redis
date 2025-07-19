@@ -1,0 +1,76 @@
+x-server-template: &server-template
+  build: .
+  environment:
+    - PAYMENT_WORKERS_COUNT=20
+    - PAYMENT_WORKERS_EVENTS_BUFFER_SIZE=2000
+    - STORAGE_WORKERS_COUNT=20
+    - STORAGE_WORKERS_EVENTS_BUFFER_SIZE=2000
+    - SERVER_PORT=8080
+    - CACHE_HOST=cache
+    - CACHE_PORT=6379
+    - CACHE_PASSWORD=password
+    - PAYMENT_DEFAULT_URL=http://payment-processor-default:8080
+    - PAYMENT_FALLBACK_URL=http://payment-processor-fallback:8080
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+  networks:
+    - backend
+    - payment-processor
+
+services:
+  load-balancer:
+    image: nginx:alpine
+    volumes:
+      - ./project/load-balancer/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "9999:80"
+    networks:
+      - backend
+    depends_on:
+      - server-1
+      - server-2
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 30M
+
+  server-1:
+    <<: *server-template
+    container_name: server-1
+    deploy:
+      resources:
+        limits:
+          cpus: "0.4"
+          memory: 60M
+  server-2:
+    <<: *server-template
+    container_name: server-2
+    deploy:
+      resources:
+        limits:
+          cpus: "0.4"
+          memory: 60M
+
+  cache:
+    image: redis:7-alpine
+    container_name: server-cache
+    restart: unless-stopped
+    command: redis-service --requirepass password
+    ports:
+      - "6379:6379"
+    volumes:
+      - cache-data:/data
+
+volumes:
+  cache-data:
+
+networks:
+  backend:
+    driver: bridge
+  # payment-processor must be up before starting backend network
+  payment-processor:
+    external: true
