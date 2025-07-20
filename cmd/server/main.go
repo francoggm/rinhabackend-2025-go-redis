@@ -21,41 +21,33 @@ func main() {
 		Addr:         fmt.Sprintf("%s:%s", cfg.Cache.Host, cfg.Cache.Port),
 		Password:     cfg.Cache.Password,
 		DB:           0,
-		PoolSize:     cfg.Workers.StorageCount,
 		MinIdleConns: 10,
 		PoolTimeout:  60, // seconds
 	}
 
 	rdb := redis.NewClient(&cacheOpts)
-	if _, err := rdb.Ping(ctx).Result(); err != nil {
+	if err := rdb.Ping(ctx).Err(); err != nil {
 		panic(err)
 	}
 
 	// Worker queues
-	paymentEventsCh := make(chan any, cfg.PaymentBufferSize)
-	storageEventsCh := make(chan any, cfg.StorageBufferSize)
+	eventsCh := make(chan any, cfg.PaymentBufferSize)
 
 	// Services
-	paymentService := services.NewPaymentService(cfg.PaymentProcessorConfig.DefaultURL, cfg.PaymentProcessorConfig.FallbackURL)
+	healthCheckService := services.NewHealthCheckService(cfg.PaymentProcessorConfig.DefaultURL, cfg.PaymentProcessorConfig.FallbackURL, rdb)
+	paymentService := services.NewPaymentService(healthCheckService, cfg.PaymentProcessorConfig.DefaultURL, cfg.PaymentProcessorConfig.FallbackURL)
 	storageService := services.NewStorageService(rdb)
 
-	// Worker processors
-	paymentProcessor := processors.NewPaymentProcessor(paymentService, storageEventsCh)
-	storageProcessor := processors.NewStorageProcessor(storageService)
-
-	// Worker orchestrators
-	paymentOrchestrator := workers.NewOrchestrator(cfg.PaymentCount, paymentEventsCh, paymentProcessor)
-	storageOrchestrator := workers.NewOrchestrator(cfg.StorageCount, storageEventsCh, storageProcessor)
+	paymentProcessor := processors.NewPaymentProcessor(paymentService, storageService)
+	paymentOrchestrator := workers.NewWorkerPool(cfg.PaymentCount, true, eventsCh, paymentProcessor)
 
 	// Start workers in order of processing
-	storageOrchestrator.StartWorkers(ctx)
 	paymentOrchestrator.StartWorkers(ctx)
 
-	server := server.NewServer(cfg, storageService, paymentEventsCh)
+	server := server.NewServer(cfg, storageService, eventsCh)
 	if err := server.Run(); err != nil {
 		panic(err)
 	}
 
-	close(paymentEventsCh)
-	close(storageEventsCh)
+	close(eventsCh)
 }

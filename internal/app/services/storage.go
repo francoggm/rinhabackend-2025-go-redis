@@ -5,23 +5,91 @@ import (
 	"francoggm/rinhabackend-2025-go-redis/internal/models"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/redis/go-redis/v9"
 )
 
-type StorageService struct{}
+const paymentsKey = "payments"
+
+type StorageService struct {
+	cache *redis.Client
+}
 
 func NewStorageService(cache *redis.Client) *StorageService {
-	return &StorageService{}
+	return &StorageService{
+		cache: cache,
+	}
 }
 
 func (s *StorageService) SavePayment(ctx context.Context, payment *models.Payment) error {
-	return nil
+	payload, err := marshalPayment(payment)
+	if err != nil {
+		return err
+	}
+
+	return s.cache.HSet(ctx, paymentsKey, payment.CorrelationID, payload).Err()
 }
 
-func (s *StorageService) GetPaymentsSummary(ctx context.Context, from, to *time.Time) (map[string]*models.ProcessorSummary, error) {
-	return nil, nil
+func (s *StorageService) GetPaymentsSummary(ctx context.Context, from, to *time.Time) (*models.PaymentsSummary, error) {
+	var paymentsSummary models.PaymentsSummary
+
+	paymentsMap, err := s.cache.HGetAll(ctx, paymentsKey).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, data := range paymentsMap {
+		payment, err := unmarshalPayment([]byte(data))
+		if err != nil {
+			return nil, err
+		}
+
+		if !paymentWithinTime(payment.RequestedAt, from, to) {
+			continue
+		}
+
+		if payment.ProcessingType == "default" {
+			paymentsSummary.DefaultSummary.TotalRequests++
+			paymentsSummary.DefaultSummary.TotalAmount += payment.Amount
+		} else {
+			paymentsSummary.FallbackSummary.TotalRequests++
+			paymentsSummary.FallbackSummary.TotalAmount += payment.Amount
+		}
+	}
+
+	return &paymentsSummary, nil
 }
 
 func (s *StorageService) PurgePayments(ctx context.Context) error {
-	return nil
+	return s.cache.Del(ctx, paymentsKey).Err()
+}
+
+func marshalPayment(payment *models.Payment) ([]byte, error) {
+	data, err := sonic.ConfigFastest.Marshal(payment)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func unmarshalPayment(data []byte) (*models.Payment, error) {
+	var payment models.Payment
+	if err := sonic.ConfigFastest.Unmarshal(data, &payment); err != nil {
+		return nil, err
+	}
+
+	return &payment, nil
+}
+
+func paymentWithinTime(requestedAt time.Time, from, to *time.Time) bool {
+	if from != nil && requestedAt.Before(*from) {
+		return false
+	}
+
+	if to != nil && requestedAt.After(*to) {
+		return false
+	}
+
+	return true
 }

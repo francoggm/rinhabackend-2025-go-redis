@@ -9,7 +9,12 @@ type Payment struct {
 	ProcessingType string    `json:"processingType,omitempty"`
 }
 
-type ProcessorSummary struct {
+type Summary struct {
 	TotalRequests int     `json:"totalRequests"`
 	TotalAmount   float32 `json:"totalAmount"`
+}
+
+type PaymentsSummary struct {
+	DefaultSummary  Summary `json:"default"`
+	FallbackSummary Summary `json:"fallback"`
 }

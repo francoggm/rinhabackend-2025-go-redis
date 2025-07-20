@@ -1,10 +1,11 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/bytedance/sonic"
 )
 
 func (h *Handlers) GetPaymentsSummary(w http.ResponseWriter, r *http.Request) {
@@ -33,11 +34,13 @@ func (h *Handlers) GetPaymentsSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(summary); err != nil {
+	data, err := sonic.Marshal(summary)
+	if err != nil {
 		fmt.Println("Error encoding response:", err)
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
 }

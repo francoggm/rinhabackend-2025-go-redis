@@ -8,13 +8,15 @@ import (
 
 type worker struct {
 	id              int
+	reenqueue       bool
 	eventsCh        chan any
 	eventsProcessor processors.Processor
 }
 
-func newWorker(id int, eventsCh chan any, eventsProcessor processors.Processor) *worker {
+func newWorker(id int, retryEvent bool, eventsCh chan any, eventsProcessor processors.Processor) *worker {
 	return &worker{
 		id:              id,
+		reenqueue:       retryEvent,
 		eventsCh:        eventsCh,
 		eventsProcessor: eventsProcessor,
 	}
@@ -32,6 +34,10 @@ func (w *worker) start(ctx context.Context) {
 
 			if err := w.eventsProcessor.ProcessEvent(ctx, event); err != nil {
 				fmt.Println("Error processing event:", err)
+
+				if w.reenqueue {
+					w.eventsCh <- event // Retry the event
+				}
 			}
 		}
 	}

@@ -3,8 +3,6 @@ x-server-template: &server-template
   environment:
     - PAYMENT_WORKERS_COUNT=20
     - PAYMENT_WORKERS_EVENTS_BUFFER_SIZE=2000
-    - STORAGE_WORKERS_COUNT=20
-    - STORAGE_WORKERS_EVENTS_BUFFER_SIZE=2000
     - SERVER_PORT=8080
     - CACHE_HOST=cache
     - CACHE_PORT=6379
@@ -12,7 +10,7 @@ x-server-template: &server-template
     - PAYMENT_DEFAULT_URL=http://payment-processor-default:8080
     - PAYMENT_FALLBACK_URL=http://payment-processor-fallback:8080
   depends_on:
-    db:
+    cache:
       condition: service_healthy
   restart: unless-stopped
   networks:
@@ -29,8 +27,8 @@ services:
     networks:
       - backend
     depends_on:
-      - server-1
-      - server-2
+      - server-cache-1
+      - server-cache-2
     restart: unless-stopped
     deploy:
       resources:
@@ -38,17 +36,17 @@ services:
           cpus: "0.2"
           memory: 30M
 
-  server-1:
+  server-cache-1:
     <<: *server-template
-    container_name: server-1
+    container_name: server-cache-1
     deploy:
       resources:
         limits:
           cpus: "0.4"
           memory: 60M
-  server-2:
+  server-cache-2:
     <<: *server-template
-    container_name: server-2
+    container_name: server-cache-2
     deploy:
       resources:
         limits:
@@ -56,14 +54,23 @@ services:
           memory: 60M
 
   cache:
-    image: redis:7-alpine
+    image: redis:latest
+    environment:
+      - REDIS_PASSWORD=password
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "password", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     container_name: server-cache
     restart: unless-stopped
-    command: redis-service --requirepass password
     ports:
       - "6379:6379"
     volumes:
       - cache-data:/data
+    networks:
+      - backend
 
 volumes:
   cache-data:

@@ -5,28 +5,28 @@ import (
 	"francoggm/rinhabackend-2025-go-redis/internal/app/workers/processors"
 )
 
-type Orchestrator struct {
+type WorkerPool struct {
 	workers         []*worker
 	eventsCh        chan any
 	eventsProcessor processors.Processor
 }
 
-func NewOrchestrator(workersCount int, eventsCh chan any, eventsProcessor processors.Processor) *Orchestrator {
+func NewWorkerPool(workersCount int, reenqueue bool, eventsCh chan any, eventsProcessor processors.Processor) *WorkerPool {
 	var workers []*worker
 	for id := range workersCount {
-		worker := newWorker(id, eventsCh, eventsProcessor)
+		worker := newWorker(id, reenqueue, eventsCh, eventsProcessor)
 		workers = append(workers, worker)
 	}
 
-	return &Orchestrator{
+	return &WorkerPool{
 		workers:         workers,
 		eventsCh:        eventsCh,
 		eventsProcessor: eventsProcessor,
 	}
 }
 
-func (o *Orchestrator) StartWorkers(ctx context.Context) {
-	for _, worker := range o.workers {
+func (w *WorkerPool) StartWorkers(ctx context.Context) {
+	for _, worker := range w.workers {
 		go worker.start(ctx)
 	}
 }
