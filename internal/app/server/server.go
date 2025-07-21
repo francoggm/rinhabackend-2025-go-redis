@@ -3,8 +3,9 @@ package server
 import (
 	"fmt"
 	"francoggm/rinhabackend-2025-go-redis/internal/app/server/handlers"
-	"francoggm/rinhabackend-2025-go-redis/internal/app/services"
+	"francoggm/rinhabackend-2025-go-redis/internal/app/storage"
 	"francoggm/rinhabackend-2025-go-redis/internal/config"
+	"francoggm/rinhabackend-2025-go-redis/internal/models"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -16,11 +17,11 @@ type Server struct {
 	handlers *handlers.Handlers
 }
 
-func NewServer(cfg *config.Config, storageService *services.StorageService, paymentEventsCh chan any) *Server {
+func NewServer(cfg *config.Config, events chan *models.Payment, storageService *storage.StorageService) *Server {
 	srv := &Server{
 		cfg:      cfg,
 		router:   chi.NewRouter(),
-		handlers: handlers.NewHandlers(cfg, storageService, paymentEventsCh),
+		handlers: handlers.NewHandlers(cfg, events, storageService),
 	}
 
 	srv.registerRoutes()

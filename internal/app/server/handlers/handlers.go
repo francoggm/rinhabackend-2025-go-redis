@@ -1,20 +1,21 @@
 package handlers
 
 import (
-	"francoggm/rinhabackend-2025-go-redis/internal/app/services"
+	"francoggm/rinhabackend-2025-go-redis/internal/app/storage"
 	"francoggm/rinhabackend-2025-go-redis/internal/config"
+	"francoggm/rinhabackend-2025-go-redis/internal/models"
 )
 
 type Handlers struct {
-	cfg             *config.Config
-	storageService  *services.StorageService
-	paymentEventsCh chan any
+	cfg            *config.Config
+	events         chan *models.Payment
+	storageService *storage.StorageService
 }
 
-func NewHandlers(cfg *config.Config, storageService *services.StorageService, paymentEventsCh chan any) *Handlers {
+func NewHandlers(cfg *config.Config, events chan *models.Payment, storageService *storage.StorageService) *Handlers {
 	return &Handlers{
-		cfg:             cfg,
-		storageService:  storageService,
-		paymentEventsCh: paymentEventsCh,
+		cfg:            cfg,
+		events:         events,
+		storageService: storageService,
 	}
 }

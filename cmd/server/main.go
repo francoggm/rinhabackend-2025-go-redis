@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"francoggm/rinhabackend-2025-go-redis/internal/app/healthcheck"
+	"francoggm/rinhabackend-2025-go-redis/internal/app/payment"
 	"francoggm/rinhabackend-2025-go-redis/internal/app/server"
-	"francoggm/rinhabackend-2025-go-redis/internal/app/services"
-	"francoggm/rinhabackend-2025-go-redis/internal/app/workers"
-	"francoggm/rinhabackend-2025-go-redis/internal/app/workers/processors"
+	"francoggm/rinhabackend-2025-go-redis/internal/app/storage"
+	"francoggm/rinhabackend-2025-go-redis/internal/app/worker"
 	"francoggm/rinhabackend-2025-go-redis/internal/config"
+	"francoggm/rinhabackend-2025-go-redis/internal/models"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -31,23 +33,21 @@ func main() {
 	}
 
 	// Worker queues
-	eventsCh := make(chan any, cfg.PaymentBufferSize)
+	events := make(chan *models.Payment, cfg.PaymentBufferSize)
 
 	// Services
-	healthCheckService := services.NewHealthCheckService(cfg.PaymentProcessorConfig.DefaultURL, cfg.PaymentProcessorConfig.FallbackURL, rdb)
-	paymentService := services.NewPaymentService(healthCheckService, cfg.PaymentProcessorConfig.DefaultURL, cfg.PaymentProcessorConfig.FallbackURL)
-	storageService := services.NewStorageService(rdb)
-
-	paymentProcessor := processors.NewPaymentProcessor(paymentService, storageService)
-	paymentOrchestrator := workers.NewWorkerPool(cfg.PaymentCount, true, eventsCh, paymentProcessor)
+	healthCheckService := healthcheck.NewHealthCheckService(cfg.PaymentProcessorConfig.DefaultURL, cfg.PaymentProcessorConfig.FallbackURL, rdb)
+	paymentService := payment.NewPaymentService(cfg.PaymentProcessorConfig.DefaultURL, cfg.PaymentProcessorConfig.FallbackURL, healthCheckService)
+	storageService := storage.NewStorageService(rdb)
 
 	// Start workers in order of processing
-	paymentOrchestrator.StartWorkers(ctx)
+	pool := worker.NewWorkerPool(cfg.Workers.PaymentCount, events, paymentService, storageService)
+	pool.StartWorkers(ctx)
 
-	server := server.NewServer(cfg, storageService, eventsCh)
+	server := server.NewServer(cfg, events, storageService)
 	if err := server.Run(); err != nil {
 		panic(err)
 	}
 
-	close(eventsCh)
+	close(events)
 }

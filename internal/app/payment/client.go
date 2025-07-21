@@ -1,7 +1,8 @@
-package paymentclient
+package payment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"francoggm/rinhabackend-2025-go-redis/internal/models"
 	"net/http"
@@ -44,6 +45,10 @@ func (c *PaymentClient) MakePayment(ctx context.Context, payment *models.Payment
 	req.SetBody(payload)
 
 	if err := c.client.DoTimeout(req, resp, c.timeout); err != nil {
+		if errors.Is(err, fasthttp.ErrTimeout) {
+			return ErrPaymentProcessingFailed
+		}
+
 		return fmt.Errorf("failed to make payment request: %w", err)
 	}
 
@@ -52,5 +57,5 @@ func (c *PaymentClient) MakePayment(ctx context.Context, payment *models.Payment
 		return fmt.Errorf("payment request failed with status code: %d", statusCode)
 	}
 
-	return err
+	return nil
 }

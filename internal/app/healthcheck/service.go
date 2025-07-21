@@ -1,4 +1,4 @@
-package services
+package healthcheck
 
 import (
 	"context"
@@ -34,44 +34,28 @@ type HealthCheckService struct {
 	cache       *redis.Client
 	instanceID  string
 
-	healthMutex    sync.RWMutex
-	inMemoryHealth *ProcessorsHealth
+	healthMutex sync.RWMutex
+	processor   string
 }
 
 func NewHealthCheckService(defaultUrl, fallbackUrl string, cache *redis.Client) *HealthCheckService {
 	service := &HealthCheckService{
-		defaultUrl:     defaultUrl,
-		fallbackUrl:    fallbackUrl,
-		client:         &fasthttp.Client{},
-		cache:          cache,
-		instanceID:     uuid.New().String(),
-		inMemoryHealth: &ProcessorsHealth{},
+		defaultUrl:  defaultUrl,
+		fallbackUrl: fallbackUrl,
+		client:      &fasthttp.Client{},
+		cache:       cache,
+		instanceID:  uuid.New().String(),
 	}
 
 	go service.backgroundRoutine()
 	return service
 }
 
-func (s *HealthCheckService) DefaultHealthCheck(ctx context.Context) (*models.HealthCheck, error) {
+func (s *HealthCheckService) AvailableProcessor(ctx context.Context) string {
 	s.healthMutex.RLock()
 	defer s.healthMutex.RUnlock()
 
-	if s.inMemoryHealth == nil || s.inMemoryHealth.Default == nil {
-		return nil, fmt.Errorf("default health status is not yet available")
-	}
-
-	return s.inMemoryHealth.Default, nil
-}
-
-func (s *HealthCheckService) FallbackHealthCheck(ctx context.Context) (*models.HealthCheck, error) {
-	s.healthMutex.RLock()
-	defer s.healthMutex.RUnlock()
-
-	if s.inMemoryHealth == nil || s.inMemoryHealth.Fallback == nil {
-		return nil, fmt.Errorf("fallback health status is not yet available")
-	}
-
-	return s.inMemoryHealth.Fallback, nil
+	return s.processor
 }
 
 func (s *HealthCheckService) backgroundRoutine() {
@@ -184,9 +168,26 @@ func (s *HealthCheckService) syncHealth(ctx context.Context) {
 		log.Println("Error unmarshalling health status from Redis:", err)
 		return
 	}
-	log.Printf("Syncing health status for instance %s: Default: %+v Fallback: %+v\n", s.instanceID, healthStatus.Default, healthStatus.Fallback)
+
+	processor := s.calculateProcessor(healthStatus)
+	log.Printf("Calculated best processor for instance %s: %s\n", s.instanceID, processor)
 
 	s.healthMutex.Lock()
-	s.inMemoryHealth = &healthStatus
+	s.processor = processor
 	s.healthMutex.Unlock()
+}
+
+func (s *HealthCheckService) calculateProcessor(healthStatus ProcessorsHealth) string {
+	defaultHealth := healthStatus.Default
+	fallbackHealth := healthStatus.Fallback
+
+	if !defaultHealth.IsFailing && defaultHealth.MinResponseTime <= 100 {
+		return "default"
+	}
+
+	if !fallbackHealth.IsFailing && fallbackHealth.MinResponseTime <= 100 {
+		return "fallback"
+	}
+
+	return ""
 }
