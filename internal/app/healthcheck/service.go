@@ -194,7 +194,7 @@ func (s *HealthCheckService) calculateProcessor(healthStatus ProcessorsHealth) s
 		return "default"
 	}
 
-	if !fallbackHealth.IsFailing && fallbackHealth.MinResponseTime < 100 {
+	if !fallbackHealth.IsFailing && fallbackHealth.MinResponseTime < 200 {
 		return "fallback"
 	}
 

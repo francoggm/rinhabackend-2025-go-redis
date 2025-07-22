@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"francoggm/rinhabackend-2025-go-redis/internal/models"
-	"log/slog"
 	"math"
 	"time"
 
@@ -46,7 +45,6 @@ func (s *StorageService) GetPaymentsSummary(ctx context.Context, from, to *time.
 
 		decoder := sonic.ConfigFastest.NewDecoder(bytes.NewReader([]byte(data)))
 		if err := decoder.Decode(&payment); err != nil {
-			slog.Error("failed to process a payment", "err", err)
 			return nil, err
 		}
 

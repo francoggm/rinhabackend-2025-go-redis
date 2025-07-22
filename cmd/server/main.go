@@ -36,8 +36,8 @@ func main() {
 	events := make(chan *models.Payment, cfg.PaymentBufferSize)
 
 	// Services
-	healthCheckService := healthcheck.NewHealthCheckService(cfg.PaymentProcessorConfig.DefaultURL, cfg.PaymentProcessorConfig.FallbackURL, rdb)
-	paymentService := payment.NewPaymentService(cfg.PaymentProcessorConfig.DefaultURL, cfg.PaymentProcessorConfig.FallbackURL, healthCheckService)
+	healthCheckService := healthcheck.NewHealthCheckService(cfg.DefaultURL, cfg.FallbackURL, rdb)
+	paymentService := payment.NewPaymentService(cfg.DefaultURL, cfg.FallbackURL, healthCheckService)
 	storageService := storage.NewStorageService(rdb)
 
 	// Start workers in order of processing
