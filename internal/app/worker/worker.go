@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"francoggm/rinhabackend-2025-go-redis/internal/app/payment"
 	"francoggm/rinhabackend-2025-go-redis/internal/app/storage"
 	"francoggm/rinhabackend-2025-go-redis/internal/models"
@@ -54,11 +53,7 @@ func (w *Worker) Start(ctx context.Context) {
 
 			if err := w.paymentService.MakePayment(ctx, event); err != nil {
 				log.Printf("Worker %d: failed to process payment %s: %v", w.id, event.CorrelationID, err)
-
-				if errors.Is(err, payment.ErrNoAvailableProcessor) || errors.Is(err, payment.ErrPaymentProcessingFailed) {
-					w.events <- event // Requeue the payment for retry
-					return
-				}
+				return
 			}
 
 			if err := w.storageService.SavePayment(ctx, event); err != nil {

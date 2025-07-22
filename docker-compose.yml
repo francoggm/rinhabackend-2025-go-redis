@@ -2,7 +2,7 @@ x-server-template: &server-template
   build: .
   environment:
     - PAYMENT_WORKERS_COUNT=20
-    - PAYMENT_WORKERS_EVENTS_BUFFER_SIZE=2000
+    - PAYMENT_WORKERS_EVENTS_BUFFER_SIZE=5000
     - SERVER_PORT=8080
     - CACHE_HOST=cache
     - CACHE_PORT=6379

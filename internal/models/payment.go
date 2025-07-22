@@ -4,14 +4,14 @@ import "time"
 
 type Payment struct {
 	CorrelationID  string    `json:"correlationId"`
-	Amount         float32   `json:"amount"`
-	RequestedAt    time.Time `json:"requestedAt"`
+	Amount         float64   `json:"amount"`
+	RequestedAt    time.Time `json:"requestedAt,omitempty"`
 	ProcessingType string    `json:"processingType,omitempty"`
 }
 
 type Summary struct {
 	TotalRequests int     `json:"totalRequests"`
-	TotalAmount   float32 `json:"totalAmount"`
+	TotalAmount   float64 `json:"totalAmount"`
 }
 
 type PaymentsSummary struct {

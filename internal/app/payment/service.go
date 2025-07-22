@@ -5,7 +5,12 @@ import (
 	"fmt"
 	"francoggm/rinhabackend-2025-go-redis/internal/app/healthcheck"
 	"francoggm/rinhabackend-2025-go-redis/internal/models"
+	"log"
+	"net/http"
 	"time"
+
+	"github.com/bytedance/sonic"
+	"github.com/valyala/fasthttp"
 )
 
 var (
@@ -14,15 +19,17 @@ var (
 )
 
 type PaymentService struct {
+	defaultUrl         string
+	fallbackUrl        string
+	client             *fasthttp.Client
 	healthCheckService *healthcheck.HealthCheckService
-	defaultClient      *PaymentClient
-	fallbackClient     *PaymentClient
 }
 
 func NewPaymentService(defaultURL, fallbackURL string, healthCheckService *healthcheck.HealthCheckService) *PaymentService {
 	return &PaymentService{
-		defaultClient:      NewPaymentClient(defaultURL, 2*time.Second),
-		fallbackClient:     NewPaymentClient(fallbackURL, 5*time.Second),
+		defaultUrl:         defaultURL + "/payments",
+		fallbackUrl:        fallbackURL + "/payments",
+		client:             &fasthttp.Client{},
 		healthCheckService: healthCheckService,
 	}
 }
@@ -33,10 +40,45 @@ func (p *PaymentService) MakePayment(ctx context.Context, payment *models.Paymen
 
 	switch processor {
 	case "default":
-		return p.defaultClient.MakePayment(ctx, payment)
+		return p.innerPayment(p.defaultUrl, payment)
 	case "fallback":
-		return p.fallbackClient.MakePayment(ctx, payment)
+		return p.innerPayment(p.fallbackUrl, payment)
 	}
 
 	return ErrNoAvailableProcessor
+}
+
+func (p *PaymentService) innerPayment(url string, payment *models.Payment) error {
+	req := fasthttp.AcquireRequest()
+	resp := fasthttp.AcquireResponse()
+	defer func() {
+		fasthttp.ReleaseRequest(req)
+		fasthttp.ReleaseResponse(resp)
+	}()
+
+	payload, err := sonic.Marshal(payment)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payment: %w", err)
+	}
+
+	req.SetRequestURI(url)
+	req.Header.SetMethod(http.MethodPost)
+	req.Header.SetContentType("application/json")
+	req.SetBody(payload)
+
+	if err := p.client.DoTimeout(req, resp, 10*time.Second); err != nil {
+		return fmt.Errorf("failed to make payment request in processor %s: %w", payment.ProcessingType, err)
+	}
+
+	statusCode := resp.StatusCode()
+	if statusCode != http.StatusOK {
+		log.Printf("Payment request failed with status code: %d, in processor: %s", statusCode, payment.ProcessingType)
+		if statusCode == http.StatusInternalServerError {
+			return ErrPaymentProcessingFailed
+		}
+
+		return fmt.Errorf("payment request failed with status code: %d, in processor: %s", statusCode, payment.ProcessingType)
+	}
+
+	return nil
 }

@@ -1,8 +1,11 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"francoggm/rinhabackend-2025-go-redis/internal/models"
+	"log/slog"
+	"math"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -39,8 +42,11 @@ func (s *StorageService) GetPaymentsSummary(ctx context.Context, from, to *time.
 	}
 
 	for _, data := range paymentsMap {
-		payment, err := unmarshalPayment([]byte(data))
-		if err != nil {
+		var payment models.Payment
+
+		decoder := sonic.ConfigFastest.NewDecoder(bytes.NewReader([]byte(data)))
+		if err := decoder.Decode(&payment); err != nil {
+			slog.Error("failed to process a payment", "err", err)
 			return nil, err
 		}
 
@@ -57,6 +63,9 @@ func (s *StorageService) GetPaymentsSummary(ctx context.Context, from, to *time.
 		}
 	}
 
+	paymentsSummary.DefaultSummary.TotalAmount = math.Round(paymentsSummary.DefaultSummary.TotalAmount*100) / 100
+	paymentsSummary.FallbackSummary.TotalAmount = math.Round(paymentsSummary.FallbackSummary.TotalAmount*100) / 100
+
 	return &paymentsSummary, nil
 }
 
@@ -71,15 +80,6 @@ func marshalPayment(payment *models.Payment) ([]byte, error) {
 	}
 
 	return data, nil
-}
-
-func unmarshalPayment(data []byte) (*models.Payment, error) {
-	var payment models.Payment
-	if err := sonic.ConfigFastest.Unmarshal(data, &payment); err != nil {
-		return nil, err
-	}
-
-	return &payment, nil
 }
 
 func paymentWithinTime(requestedAt time.Time, from, to *time.Time) bool {

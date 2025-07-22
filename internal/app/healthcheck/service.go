@@ -65,22 +65,31 @@ func (s *HealthCheckService) backgroundRoutine() {
 	for range ticker.C {
 		ctx := context.Background()
 
-		isLeader, err := s.tryAcquireLeader(ctx)
+		acquire, err := s.cache.SetNX(ctx, leaderLockKey, s.instanceID, leaderLockTTL).Result()
 		if err != nil {
 			log.Printf("Error acquiring leader lock for instance %s: %v\n", s.instanceID, err)
+			continue
+		}
+
+		isLeader := acquire
+		if !isLeader {
+			currentLeader, err := s.cache.Get(ctx, leaderLockKey).Result()
+			if err == nil && currentLeader == s.instanceID {
+				isLeader = true
+			}
 		}
 
 		if isLeader {
+			log.Println("Leader acquired, performing health checks")
 			s.performChecksAndUpdate(ctx)
-			log.Printf("Leader acquired for instance %s, performing health checks\n", s.instanceID)
+
+			if err := s.cache.Expire(ctx, leaderLockKey, leaderLockTTL).Err(); err != nil {
+				log.Printf("Error renewing leader lock: %v\n", err)
+			}
 		}
 
 		s.syncHealth(ctx)
 	}
-}
-
-func (s *HealthCheckService) tryAcquireLeader(ctx context.Context) (bool, error) {
-	return s.cache.SetNX(ctx, leaderLockKey, s.instanceID, leaderLockTTL).Result()
 }
 
 func (s *HealthCheckService) performChecksAndUpdate(ctx context.Context) {
@@ -170,7 +179,7 @@ func (s *HealthCheckService) syncHealth(ctx context.Context) {
 	}
 
 	processor := s.calculateProcessor(healthStatus)
-	log.Printf("Calculated best processor for instance %s: %s\n", s.instanceID, processor)
+	log.Printf("Calculated best processor: %s\n", processor)
 
 	s.healthMutex.Lock()
 	s.processor = processor
@@ -181,11 +190,11 @@ func (s *HealthCheckService) calculateProcessor(healthStatus ProcessorsHealth) s
 	defaultHealth := healthStatus.Default
 	fallbackHealth := healthStatus.Fallback
 
-	if !defaultHealth.IsFailing && defaultHealth.MinResponseTime <= 100 {
+	if !defaultHealth.IsFailing && defaultHealth.MinResponseTime < 300 {
 		return "default"
 	}
 
-	if !fallbackHealth.IsFailing && fallbackHealth.MinResponseTime <= 100 {
+	if !fallbackHealth.IsFailing && fallbackHealth.MinResponseTime < 100 {
 		return "fallback"
 	}
 

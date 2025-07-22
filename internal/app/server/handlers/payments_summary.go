@@ -13,7 +13,7 @@ func (h *Handlers) GetPaymentsSummary(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
 	var from, to *time.Time
-	layout := time.RFC3339
+	layout := time.RFC3339Nano
 
 	if fromStr := query.Get("from"); fromStr != "" {
 		if t, err := time.Parse(layout, fromStr); err == nil {
