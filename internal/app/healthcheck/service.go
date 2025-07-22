@@ -55,7 +55,8 @@ func (s *HealthCheckService) AvailableProcessor(ctx context.Context) string {
 	s.healthMutex.RLock()
 	defer s.healthMutex.RUnlock()
 
-	return s.processor
+	processor := s.processor
+	return processor
 }
 
 func (s *HealthCheckService) backgroundRoutine() {
