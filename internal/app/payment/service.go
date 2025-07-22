@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"francoggm/rinhabackend-2025-go-redis/internal/app/healthcheck"
 	"francoggm/rinhabackend-2025-go-redis/internal/models"
-	"log"
 	"net/http"
 	"time"
 
@@ -72,11 +71,6 @@ func (p *PaymentService) innerPayment(url string, payment *models.Payment) error
 
 	statusCode := resp.StatusCode()
 	if statusCode != http.StatusOK {
-		log.Printf("Payment request failed with status code: %d, in processor: %s", statusCode, payment.ProcessingType)
-		if statusCode == http.StatusInternalServerError {
-			return ErrPaymentProcessingFailed
-		}
-
 		return fmt.Errorf("payment request failed with status code: %d, in processor: %s", statusCode, payment.ProcessingType)
 	}
 

@@ -80,7 +80,6 @@ func (s *HealthCheckService) backgroundRoutine() {
 		}
 
 		if isLeader {
-			log.Println("Leader acquired, performing health checks")
 			s.performChecksAndUpdate(ctx)
 
 			if err := s.cache.Expire(ctx, leaderLockKey, leaderLockTTL).Err(); err != nil {
@@ -190,11 +189,11 @@ func (s *HealthCheckService) calculateProcessor(healthStatus ProcessorsHealth) s
 	defaultHealth := healthStatus.Default
 	fallbackHealth := healthStatus.Fallback
 
-	if !defaultHealth.IsFailing && defaultHealth.MinResponseTime < 300 {
+	if !defaultHealth.IsFailing && defaultHealth.MinResponseTime <= 300 {
 		return "default"
 	}
 
-	if !fallbackHealth.IsFailing && fallbackHealth.MinResponseTime < 200 {
+	if !fallbackHealth.IsFailing && fallbackHealth.MinResponseTime <= 100 {
 		return "fallback"
 	}
 
