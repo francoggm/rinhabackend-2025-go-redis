@@ -53,7 +53,7 @@ func (w *Worker) Start(ctx context.Context) {
 
 			if err := w.paymentService.MakePayment(ctx, event); err != nil {
 				log.Printf("Worker %d: failed to process payment %s: %v", w.id, event.CorrelationID, err)
-				return
+				continue
 			}
 
 			if err := w.storageService.SavePayment(ctx, event); err != nil {

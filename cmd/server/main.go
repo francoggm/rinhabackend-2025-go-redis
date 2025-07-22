@@ -20,11 +20,12 @@ func main() {
 	ctx := context.Background()
 
 	cacheOpts := redis.Options{
-		Addr:         fmt.Sprintf("%s:%s", cfg.Cache.Host, cfg.Cache.Port),
-		Password:     cfg.Cache.Password,
+		Addr:         fmt.Sprintf("%s:%s", cfg.Host, cfg.Cache.Port),
+		Password:     cfg.Password,
 		DB:           0,
-		MinIdleConns: 10,
-		PoolTimeout:  60, // seconds
+		PoolSize:     250,
+		MinIdleConns: 20,
+		PoolTimeout:  60,
 	}
 
 	rdb := redis.NewClient(&cacheOpts)
@@ -41,7 +42,7 @@ func main() {
 	storageService := storage.NewStorageService(rdb)
 
 	// Start workers in order of processing
-	pool := worker.NewWorkerPool(cfg.Workers.PaymentCount, events, paymentService, storageService)
+	pool := worker.NewWorkerPool(cfg.PaymentCount, events, paymentService, storageService)
 	pool.StartWorkers(ctx)
 
 	server := server.NewServer(cfg, events, storageService)

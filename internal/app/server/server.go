@@ -7,6 +7,7 @@ import (
 	"francoggm/rinhabackend-2025-go-redis/internal/config"
 	"francoggm/rinhabackend-2025-go-redis/internal/models"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -35,5 +36,13 @@ func (s *Server) registerRoutes() {
 }
 
 func (s *Server) Run() error {
-	return http.ListenAndServe(fmt.Sprintf(":%s", s.cfg.Server.Port), s.router)
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%s", s.cfg.Server.Port),
+		Handler:      s.router,
+		IdleTimeout:  15 * time.Second,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	return srv.ListenAndServe()
 }

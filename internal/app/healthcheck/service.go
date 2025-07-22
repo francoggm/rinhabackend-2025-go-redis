@@ -42,7 +42,7 @@ func NewHealthCheckService(defaultUrl, fallbackUrl string, cache *redis.Client) 
 	service := &HealthCheckService{
 		defaultUrl:  defaultUrl,
 		fallbackUrl: fallbackUrl,
-		client:      &fasthttp.Client{},
+		client:      &fasthttp.Client{MaxConnsPerHost: 10},
 		cache:       cache,
 		instanceID:  uuid.New().String(),
 	}
@@ -53,9 +53,9 @@ func NewHealthCheckService(defaultUrl, fallbackUrl string, cache *redis.Client) 
 
 func (s *HealthCheckService) AvailableProcessor(ctx context.Context) string {
 	s.healthMutex.RLock()
-	defer s.healthMutex.RUnlock()
-
 	processor := s.processor
+	s.healthMutex.RUnlock()
+
 	return processor
 }
 
@@ -190,12 +190,16 @@ func (s *HealthCheckService) calculateProcessor(healthStatus ProcessorsHealth) s
 	defaultHealth := healthStatus.Default
 	fallbackHealth := healthStatus.Fallback
 
-	if !defaultHealth.IsFailing && defaultHealth.MinResponseTime <= 300 {
+	if defaultHealth != nil && !defaultHealth.IsFailing && defaultHealth.MinResponseTime <= 300 {
 		return "default"
 	}
 
-	if !fallbackHealth.IsFailing && fallbackHealth.MinResponseTime <= 100 {
+	if fallbackHealth != nil && !fallbackHealth.IsFailing && defaultHealth.MinResponseTime <= 200 {
 		return "fallback"
+	}
+
+	if defaultHealth != nil && !defaultHealth.IsFailing {
+		return "default"
 	}
 
 	return ""

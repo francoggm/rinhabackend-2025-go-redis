@@ -28,7 +28,7 @@ func NewPaymentService(defaultURL, fallbackURL string, healthCheckService *healt
 	return &PaymentService{
 		defaultUrl:         defaultURL + "/payments",
 		fallbackUrl:        fallbackURL + "/payments",
-		client:             &fasthttp.Client{},
+		client:             &fasthttp.Client{MaxConnsPerHost: 250},
 		healthCheckService: healthCheckService,
 	}
 }
