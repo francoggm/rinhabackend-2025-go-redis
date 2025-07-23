@@ -2,7 +2,7 @@ x-server-template: &server-template
   build: .
   environment:
     - PAYMENT_WORKERS_COUNT=50
-    - PAYMENT_WORKERS_EVENTS_BUFFER_SIZE=10000
+    - PAYMENT_WORKERS_EVENTS_BUFFER_SIZE=5000
     - SERVER_PORT=8080
     - CACHE_HOST=cache
     - CACHE_PORT=6379
@@ -16,6 +16,10 @@ x-server-template: &server-template
   networks:
     - backend
     - payment-processor
+  sysctls:
+    - net.core.somaxconn=65535
+    - net.ipv4.tcp_tw_reuse=1
+    - net.ipv4.ip_local_port_range=1024 65535
 
 services:
   load-balancer:

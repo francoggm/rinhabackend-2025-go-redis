@@ -71,6 +71,13 @@ func (p *PaymentService) innerPayment(url string, payment *models.Payment) error
 
 	statusCode := resp.StatusCode()
 	if statusCode != http.StatusOK {
+		if statusCode == http.StatusInternalServerError ||
+			statusCode == http.StatusRequestTimeout ||
+			statusCode == http.StatusTooManyRequests ||
+			statusCode == http.StatusServiceUnavailable {
+			return ErrPaymentProcessingFailed
+		}
+
 		return fmt.Errorf("payment request failed with status code: %d, in processor: %s", statusCode, payment.ProcessingType)
 	}
 
