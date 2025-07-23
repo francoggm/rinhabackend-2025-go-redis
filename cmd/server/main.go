@@ -35,7 +35,7 @@ func main() {
 
 	// Worker queues
 	events := make(chan *models.Payment, cfg.PaymentBufferSize)
-	retryEvents := make(chan *models.Payment, cfg.PaymentBufferSize/2)
+	retryEvents := make(chan *models.Payment, cfg.PaymentBufferSize)
 
 	// Services
 	healthCheckService := healthcheck.NewHealthCheckService(cfg.DefaultURL, cfg.FallbackURL, rdb)

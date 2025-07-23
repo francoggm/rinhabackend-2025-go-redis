@@ -18,10 +18,11 @@ var (
 )
 
 type PaymentService struct {
-	defaultUrl         string
-	fallbackUrl        string
-	client             *fasthttp.Client
-	healthCheckService *healthcheck.HealthCheckService
+	defaultUrl  string
+	fallbackUrl string
+	client      *fasthttp.Client
+
+	HealthCheckService *healthcheck.HealthCheckService
 }
 
 func NewPaymentService(defaultURL, fallbackURL string, healthCheckService *healthcheck.HealthCheckService) *PaymentService {
@@ -29,12 +30,12 @@ func NewPaymentService(defaultURL, fallbackURL string, healthCheckService *healt
 		defaultUrl:         defaultURL + "/payments",
 		fallbackUrl:        fallbackURL + "/payments",
 		client:             &fasthttp.Client{MaxConnsPerHost: 250},
-		healthCheckService: healthCheckService,
+		HealthCheckService: healthCheckService,
 	}
 }
 
 func (p *PaymentService) MakePayment(ctx context.Context, payment *models.Payment) error {
-	processor := p.healthCheckService.AvailableProcessor(ctx)
+	processor := p.HealthCheckService.AvailableProcessor(ctx)
 	payment.ProcessingType = processor
 
 	switch processor {

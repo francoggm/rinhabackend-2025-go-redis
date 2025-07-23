@@ -7,6 +7,7 @@ import (
 	"francoggm/rinhabackend-2025-go-redis/internal/app/storage"
 	"francoggm/rinhabackend-2025-go-redis/internal/models"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -29,7 +30,7 @@ func (w *Worker) StartWork(ctx context.Context) {
 			}
 
 			if err := w.paymentService.MakePayment(ctx, event); err != nil {
-				log.Printf("Worker %d: failed to process payment %s: %v", w.id, event.CorrelationID, err)
+				// log.Printf("Worker %d: failed to process payment %s: %v", w.id, event.CorrelationID, err)
 
 				if errors.Is(err, payment.ErrNoAvailableProcessor) || err == payment.ErrPaymentProcessingFailed {
 					w.retryEvents <- event
@@ -46,40 +47,63 @@ func (w *Worker) StartWork(ctx context.Context) {
 }
 
 func (w *Worker) StartRetryWork(ctx context.Context) {
-	const batchSize = 500
-	const cooldown = 1000 // milliseconds
+	var mu sync.Mutex
 
-	for {
-		processed := 0
+	const maxBatchSize = 100
+	paymentsBatch := make([]*models.Payment, 0, maxBatchSize)
 
-		for processed < batchSize {
-			select {
-			case <-ctx.Done():
-				return
-			case retryEvent, ok := <-w.retryEvents:
-				if !ok {
-					return
-				}
+	processBatch := func(processor string) {
+		mu.Lock()
+		batch := paymentsBatch
+		if len(batch) > maxBatchSize {
+			batch = batch[:maxBatchSize]
+		}
+		paymentsBatch = paymentsBatch[len(batch):]
+		mu.Unlock()
 
-				if err := w.paymentService.MakePayment(ctx, retryEvent); err != nil {
-					log.Printf("Worker %d: failed to retry payment %s: %v", w.id, retryEvent.CorrelationID, err)
+		if processor != "" && len(batch) > 0 {
+			log.Printf("Worker %d: retrying payments for processor %s, quantity: %d", w.id, processor, len(batch))
+
+			for _, payment := range batch {
+				if err := w.paymentService.MakePayment(ctx, payment); err != nil {
 					continue
 				}
 
-				if err := w.storageService.SavePayment(ctx, retryEvent); err != nil {
-					log.Printf("Worker %d: failed to save retried payment %s: %v", w.id, retryEvent.CorrelationID, err)
+				if err := w.storageService.SavePayment(ctx, payment); err != nil {
+					log.Printf("Worker %d: failed to save retried payment %s: %v", w.id, payment.CorrelationID, err)
 				}
-
-				processed++
 			}
 		}
+	}
 
-		log.Printf("Processed: %d", processed)
+	go func() {
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
 
+		for range ticker.C {
+			processor := w.paymentService.HealthCheckService.AvailableProcessor(ctx)
+			processBatch(processor)
+		}
+	}()
+
+	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(time.Duration(cooldown) * time.Millisecond):
+		case retryEvent, ok := <-w.retryEvents:
+			if !ok {
+				return
+			}
+
+			mu.Lock()
+			paymentsBatch = append(paymentsBatch, retryEvent)
+			batchReady := len(paymentsBatch) >= maxBatchSize
+			mu.Unlock()
+
+			if batchReady {
+				processor := w.paymentService.HealthCheckService.AvailableProcessor(ctx)
+				processBatch(processor)
+			}
 		}
 	}
 }
