@@ -30,8 +30,6 @@ func (w *Worker) StartWork(ctx context.Context) {
 			}
 
 			if err := w.paymentService.MakePayment(ctx, event); err != nil {
-				// log.Printf("Worker %d: failed to process payment %s: %v", w.id, event.CorrelationID, err)
-
 				if errors.Is(err, payment.ErrNoAvailableProcessor) || err == payment.ErrPaymentProcessingFailed {
 					w.retryEvents <- event
 				}
@@ -40,7 +38,7 @@ func (w *Worker) StartWork(ctx context.Context) {
 			}
 
 			if err := w.storageService.SavePayment(ctx, event); err != nil {
-				log.Printf("Worker %d: failed to save payment %s: %v", w.id, event.CorrelationID, err)
+				log.Printf("Worker %d: failed to save payment %s: %v\n", w.id, event.CorrelationID, err)
 			}
 		}
 	}
@@ -49,40 +47,37 @@ func (w *Worker) StartWork(ctx context.Context) {
 func (w *Worker) StartRetryWork(ctx context.Context) {
 	var mu sync.Mutex
 
-	const maxBatchSize = 100
-	paymentsBatch := make([]*models.Payment, 0, maxBatchSize)
-
-	processBatch := func(processor string) {
-		mu.Lock()
-		batch := paymentsBatch
-		if len(batch) > maxBatchSize {
-			batch = batch[:maxBatchSize]
-		}
-		paymentsBatch = paymentsBatch[len(batch):]
-		mu.Unlock()
-
-		if processor != "" && len(batch) > 0 {
-			log.Printf("Worker %d: retrying payments for processor %s, quantity: %d", w.id, processor, len(batch))
-
-			for _, payment := range batch {
-				if err := w.paymentService.MakePayment(ctx, payment); err != nil {
-					continue
-				}
-
-				if err := w.storageService.SavePayment(ctx, payment); err != nil {
-					log.Printf("Worker %d: failed to save retried payment %s: %v", w.id, payment.CorrelationID, err)
-				}
-			}
-		}
-	}
+	paymentsBatch := make([]*models.Payment, 0, 500)
 
 	go func() {
-		ticker := time.NewTicker(50 * time.Millisecond)
+		ticker := time.NewTicker(200 * time.Millisecond)
 		defer ticker.Stop()
 
 		for range ticker.C {
 			processor := w.paymentService.HealthCheckService.AvailableProcessor(ctx)
-			processBatch(processor)
+
+			mu.Lock()
+			batchSize := len(paymentsBatch)
+			mu.Unlock()
+
+			if processor != "" && batchSize > 0 {
+				mu.Lock()
+
+				log.Printf("Worker %d: retrying payments for processor %s, quantity: %d", w.id, processor, len(paymentsBatch))
+				for _, payment := range paymentsBatch {
+					if err := w.paymentService.MakePayment(ctx, payment); err != nil {
+						log.Printf("Worker %d: failed to retry payment %s: %v", w.id, payment.CorrelationID, err)
+						continue
+					}
+
+					if err := w.storageService.SavePayment(ctx, payment); err != nil {
+						log.Printf("Worker %d: failed to save retried payment %s: %v", w.id, payment.CorrelationID, err)
+					}
+				}
+
+				paymentsBatch = make([]*models.Payment, 0, 500)
+				mu.Unlock()
+			}
 		}
 	}()
 
@@ -97,13 +92,7 @@ func (w *Worker) StartRetryWork(ctx context.Context) {
 
 			mu.Lock()
 			paymentsBatch = append(paymentsBatch, retryEvent)
-			batchReady := len(paymentsBatch) >= maxBatchSize
 			mu.Unlock()
-
-			if batchReady {
-				processor := w.paymentService.HealthCheckService.AvailableProcessor(ctx)
-				processBatch(processor)
-			}
 		}
 	}
 }
