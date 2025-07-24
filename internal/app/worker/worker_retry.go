@@ -33,6 +33,8 @@ func NewRetryWorker(id int, retryEvents chan *RetryEvent, ps *payment.PaymentSer
 }
 
 func (w *RetryWorker) Start(ctx context.Context) {
+	log.Printf("Worker %d: starting retry worker\n", w.id)
+
 	const maxBatchSize = 20
 	const batchTimeout = 200 * time.Millisecond
 
