@@ -35,7 +35,6 @@ func main() {
 
 	// Worker queues
 	events := make(chan *models.Payment, cfg.PaymentBufferSize)
-	retryEvents := make(chan *models.Payment, cfg.PaymentBufferSize)
 
 	// Services
 	healthCheckService := healthcheck.NewHealthCheckService(cfg.DefaultURL, cfg.FallbackURL, rdb)
@@ -43,7 +42,7 @@ func main() {
 	storageService := storage.NewStorageService(rdb)
 
 	// Start workers in order of processing
-	pool := worker.NewWorkerPool(cfg.PaymentCount, events, retryEvents, paymentService, storageService)
+	pool := worker.NewWorkerPool(cfg.PaymentCount, events, paymentService, storageService)
 	pool.StartWorkers(ctx)
 
 	server := server.NewServer(cfg, events, storageService)
