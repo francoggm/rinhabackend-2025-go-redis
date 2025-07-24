@@ -110,9 +110,12 @@ func (s *HealthCheckService) performChecksAndUpdate(ctx context.Context) {
 
 	if defaultErr != nil {
 		log.Println("Error checking default health:", defaultErr)
+		return
 	}
+
 	if fallbackErr != nil {
 		log.Println("Error checking fallback health:", fallbackErr)
+		return
 	}
 
 	combinedHealth := &ProcessorsHealth{

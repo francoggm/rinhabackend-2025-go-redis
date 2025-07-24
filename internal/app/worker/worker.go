@@ -7,7 +7,6 @@ import (
 	"francoggm/rinhabackend-2025-go-redis/internal/app/storage"
 	"francoggm/rinhabackend-2025-go-redis/internal/models"
 	"log"
-	"sync"
 	"time"
 )
 
@@ -45,54 +44,76 @@ func (w *Worker) StartWork(ctx context.Context) {
 }
 
 func (w *Worker) StartRetryWork(ctx context.Context) {
-	var mu sync.Mutex
+	const maxBatchSize = 500
+	const batchTimeout = 200 * time.Millisecond
 
-	paymentsBatch := make([]*models.Payment, 0, 500)
+	var paymentsBatch []*models.Payment
 
-	go func() {
-		ticker := time.NewTicker(200 * time.Millisecond)
-		defer ticker.Stop()
+	timer := time.NewTimer(batchTimeout)
+	if !timer.Stop() {
+		<-timer.C
+	}
 
-		for range ticker.C {
-			processor := w.paymentService.HealthCheckService.AvailableProcessor(ctx)
-
-			mu.Lock()
-			batchSize := len(paymentsBatch)
-			mu.Unlock()
-
-			if processor != "" && batchSize > 0 {
-				mu.Lock()
-
-				log.Printf("Worker %d: retrying payments for processor %s, quantity: %d", w.id, processor, len(paymentsBatch))
-				for _, payment := range paymentsBatch {
-					if err := w.paymentService.MakePayment(ctx, payment); err != nil {
-						log.Printf("Worker %d: failed to retry payment %s: %v", w.id, payment.CorrelationID, err)
-						continue
-					}
-
-					if err := w.storageService.SavePayment(ctx, payment); err != nil {
-						log.Printf("Worker %d: failed to save retried payment %s: %v", w.id, payment.CorrelationID, err)
-					}
-				}
-
-				paymentsBatch = make([]*models.Payment, 0, 500)
-				mu.Unlock()
-			}
+	flush := func() {
+		if len(paymentsBatch) == 0 {
+			return
 		}
-	}()
+
+		batchCopy := make([]*models.Payment, len(paymentsBatch))
+		copy(batchCopy, paymentsBatch)
+
+		go w.processRetryBatch(ctx, batchCopy)
+		paymentsBatch = paymentsBatch[:0]
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
+			flush()
 			return
-		case retryEvent, ok := <-w.retryEvents:
+		case event, ok := <-w.retryEvents:
 			if !ok {
+				flush()
 				return
 			}
 
-			mu.Lock()
-			paymentsBatch = append(paymentsBatch, retryEvent)
-			mu.Unlock()
+			if len(paymentsBatch) == 0 {
+				timer.Reset(batchTimeout)
+			}
+
+			paymentsBatch = append(paymentsBatch, event)
+
+			if len(paymentsBatch) >= maxBatchSize {
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				flush()
+			}
+		case <-timer.C:
+			flush()
+		}
+	}
+}
+
+func (w *Worker) processRetryBatch(ctx context.Context, batch []*models.Payment) {
+	time.Sleep(3000 * time.Millisecond)
+
+	processor := w.paymentService.HealthCheckService.AvailableProcessor(ctx)
+	if processor == "" {
+		log.Printf("Worker %d: no available processor for retry batch\n", w.id)
+		return
+	}
+
+	for _, payment := range batch {
+		if err := w.paymentService.MakePayment(ctx, payment); err != nil {
+			continue
+		}
+
+		if err := w.storageService.SavePayment(ctx, payment); err != nil {
+			log.Printf("Worker %d: failed to save payment %s after retry: %v\n", w.id, payment.CorrelationID, err)
 		}
 	}
 }
