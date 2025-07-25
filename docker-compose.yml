@@ -58,7 +58,7 @@ services:
           memory: 60M
 
   cache:
-    image: redis:latest
+    image: redis:7-alpine
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "ping"]
       interval: 5s
@@ -67,12 +67,20 @@ services:
       start_period: 10s
     container_name: server-cache
     restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     ports:
       - "6379:6379"
     volumes:
+      - ./project/cache/redis.conf:/usr/local/etc/redis/redis.conf:ro
       - cache-data:/data
     networks:
       - backend
+    sysctls:
+      - net.core.somaxconn=8192
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     deploy:
       resources:
         limits:
