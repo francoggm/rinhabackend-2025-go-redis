@@ -13,9 +13,8 @@ type Config struct {
 }
 
 type Cache struct {
-	Host     string
-	Port     string
-	Password string
+	Host string
+	Port string
 }
 
 type Workers struct {
@@ -35,9 +34,8 @@ type PaymentProcessorConfig struct {
 func NewConfig() *Config {
 	return &Config{
 		Cache: Cache{
-			Host:     getEnvString("CACHE_HOST", "localhost"),
-			Port:     getEnvString("CACHE_PORT", "6373"),
-			Password: getEnvString("CACHE_PASSWORD", "password"),
+			Host: getEnvString("CACHE_HOST", "localhost"),
+			Port: getEnvString("CACHE_PORT", "6373"),
 		},
 		Workers: Workers{
 			PaymentCount:      getEnvInt("PAYMENT_WORKERS_COUNT", 5),

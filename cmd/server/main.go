@@ -21,7 +21,7 @@ func main() {
 
 	cacheOpts := redis.Options{
 		Addr:         fmt.Sprintf("%s:%s", cfg.Host, cfg.Cache.Port),
-		Password:     cfg.Password,
+		Password:     "",
 		DB:           0,
 		PoolSize:     250,
 		MinIdleConns: 20,
