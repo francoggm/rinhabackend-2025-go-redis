@@ -40,8 +40,10 @@ func (p *PaymentService) MakePayment(ctx context.Context, payment *models.Paymen
 
 	switch processor {
 	case "default":
+		payment.RequestedAt = time.Now().UTC()
 		return p.innerPayment(p.defaultUrl, payment)
 	case "fallback":
+		payment.RequestedAt = time.Now().UTC()
 		return p.innerPayment(p.fallbackUrl, payment)
 	}
 

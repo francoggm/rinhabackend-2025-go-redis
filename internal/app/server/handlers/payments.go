@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"francoggm/rinhabackend-2025-go-redis/internal/models"
 	"net/http"
-	"time"
 )
 
 func (h *Handlers) ProcessPayment(w http.ResponseWriter, r *http.Request) {
@@ -15,8 +14,10 @@ func (h *Handlers) ProcessPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payment.RequestedAt = time.Now().UTC()
-	h.events <- &payment
-
-	w.WriteHeader(http.StatusAccepted)
+	select {
+	case h.events <- &payment:
+		w.WriteHeader(http.StatusAccepted)
+	default:
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
 }
