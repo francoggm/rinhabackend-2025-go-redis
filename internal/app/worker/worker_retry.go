@@ -33,7 +33,7 @@ func NewRetryWorker(id int, retryEvents chan *RetryEvent, ps *payment.PaymentSer
 }
 
 func (w *RetryWorker) StartWork(ctx context.Context) {
-	const maxBatchSize = 20
+	const maxBatchSize = 50
 	const batchTimeout = 200 * time.Millisecond
 
 	var batch []*RetryEvent
@@ -96,7 +96,7 @@ func (w *RetryWorker) processBatch(ctx context.Context, batch []*RetryEvent) {
 		log.Printf("Worker %d: no available processor for retry batch\n", w.id)
 
 		for _, event := range batch {
-			time.AfterFunc(600*time.Millisecond, func() {
+			time.AfterFunc(700*time.Millisecond, func() {
 				w.retryEvents <- event
 			})
 		}
