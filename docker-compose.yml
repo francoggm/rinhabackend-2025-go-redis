@@ -38,7 +38,7 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: 30M
+          memory: "50MB"
 
   server-cache-1:
     <<: *server-template
@@ -46,16 +46,16 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.4"
-          memory: 60M
+          cpus: "0.5"
+          memory: "100MB"
   server-cache-2:
     <<: *server-template
     container_name: server-cache-2
     deploy:
       resources:
         limits:
-          cpus: "0.4"
-          memory: 60M
+          cpus: "0.5"
+          memory: "100MB"
 
   cache:
     image: redis:7-alpine
@@ -84,8 +84,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: 200MB
+          cpus: "0.3"
+          memory: "100MB"
 
 volumes:
   cache-data:

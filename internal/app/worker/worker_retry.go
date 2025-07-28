@@ -32,9 +32,7 @@ func NewRetryWorker(id int, retryEvents chan *RetryEvent, ps *payment.PaymentSer
 	}
 }
 
-func (w *RetryWorker) Start(ctx context.Context) {
-	log.Printf("Worker %d: starting retry worker\n", w.id)
-
+func (w *RetryWorker) StartWork(ctx context.Context) {
 	const maxBatchSize = 20
 	const batchTimeout = 200 * time.Millisecond
 
@@ -97,36 +95,36 @@ func (w *RetryWorker) processBatch(ctx context.Context, batch []*RetryEvent) {
 	if processor == "" {
 		log.Printf("Worker %d: no available processor for retry batch\n", w.id)
 
-		for _, item := range batch {
-			time.AfterFunc(500*time.Millisecond, func() {
-				w.retryEvents <- item
+		for _, event := range batch {
+			time.AfterFunc(600*time.Millisecond, func() {
+				w.retryEvents <- event
 			})
 		}
 		return
 	}
 
-	for _, item := range batch {
-		if err := w.paymentService.MakePayment(ctx, item.Payment); err != nil {
-			item.RetryCount++
-			const maxRetries = 5
+	for _, event := range batch {
+		if err := w.paymentService.MakePayment(ctx, event.Payment); err != nil {
+			event.RetryCount++
+			const maxRetries = 6
 
-			if item.RetryCount >= maxRetries {
-				log.Printf("Worker %d: payment %s failed after %d retries, giving up\n", w.id, item.Payment.CorrelationID, item.RetryCount)
+			if event.RetryCount >= maxRetries {
+				log.Printf("Worker %d: payment %s failed after %d retries, giving up\n", w.id, event.Payment.CorrelationID, event.RetryCount)
 				continue
 			}
 
-			backoff := time.Duration(math.Pow(2, float64(item.RetryCount))) * 100 * time.Millisecond
+			backoff := time.Duration(math.Pow(2, float64(event.RetryCount))) * 100 * time.Millisecond
 			jitter := time.Duration(rand.Intn(100)) * time.Millisecond
 			delay := backoff + jitter
 
 			time.AfterFunc(delay, func() {
-				w.retryEvents <- item
+				w.retryEvents <- event
 			})
 			continue
 		}
 
-		if err := w.storageService.SavePayment(ctx, item.Payment); err != nil {
-			log.Printf("Worker %d: failed to save payment %s after retry: %v\n", w.id, item.Payment.CorrelationID, err)
+		if err := w.storageService.SavePayment(ctx, event.Payment); err != nil {
+			log.Printf("Worker %d: failed to save payment %s after retry: %v\n", w.id, event.Payment.CorrelationID, err)
 		}
 	}
 }

@@ -17,6 +17,16 @@ type Worker struct {
 	storageService *storage.StorageService
 }
 
+func NewWorker(id int, events chan *models.Payment, retryEvents chan *RetryEvent, ps *payment.PaymentService, ss *storage.StorageService) *Worker {
+	return &Worker{
+		id:             id,
+		events:         events,
+		retryEvents:    retryEvents,
+		paymentService: ps,
+		storageService: ss,
+	}
+}
+
 func (w *Worker) StartWork(ctx context.Context) {
 	for {
 		select {

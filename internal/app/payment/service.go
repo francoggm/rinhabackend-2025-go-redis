@@ -25,11 +25,15 @@ type PaymentService struct {
 	HealthCheckService *healthcheck.HealthCheckService
 }
 
-func NewPaymentService(defaultURL, fallbackURL string, healthCheckService *healthcheck.HealthCheckService) *PaymentService {
+func NewPaymentService(defaultHost, fallbackHost string, healthCheckService *healthcheck.HealthCheckService) *PaymentService {
+	client := &fasthttp.Client{
+		MaxConnsPerHost: 1000,
+	}
+
 	return &PaymentService{
-		defaultUrl:         defaultURL + "/payments",
-		fallbackUrl:        fallbackURL + "/payments",
-		client:             &fasthttp.Client{MaxConnsPerHost: 250},
+		defaultUrl:         defaultHost + "/payments",
+		fallbackUrl:        fallbackHost + "/payments",
+		client:             client,
 		HealthCheckService: healthCheckService,
 	}
 }
@@ -40,10 +44,8 @@ func (p *PaymentService) MakePayment(ctx context.Context, payment *models.Paymen
 
 	switch processor {
 	case "default":
-		payment.RequestedAt = time.Now().UTC()
 		return p.innerPayment(p.defaultUrl, payment)
 	case "fallback":
-		payment.RequestedAt = time.Now().UTC()
 		return p.innerPayment(p.fallbackUrl, payment)
 	}
 
@@ -51,13 +53,13 @@ func (p *PaymentService) MakePayment(ctx context.Context, payment *models.Paymen
 }
 
 func (p *PaymentService) innerPayment(url string, payment *models.Payment) error {
-	req := fasthttp.AcquireRequest()
-	resp := fasthttp.AcquireResponse()
+	req, resp := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
 	defer func() {
 		fasthttp.ReleaseRequest(req)
 		fasthttp.ReleaseResponse(resp)
 	}()
 
+	payment.RequestedAt = time.Now().UTC()
 	payload, err := sonic.Marshal(payment)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payment: %w", err)
@@ -68,7 +70,7 @@ func (p *PaymentService) innerPayment(url string, payment *models.Payment) error
 	req.Header.SetContentType("application/json")
 	req.SetBody(payload)
 
-	if err := p.client.DoTimeout(req, resp, 10*time.Second); err != nil {
+	if err := p.client.DoTimeout(req, resp, 2*time.Second); err != nil {
 		return fmt.Errorf("failed to make payment request in processor %s: %w", payment.ProcessingType, err)
 	}
 

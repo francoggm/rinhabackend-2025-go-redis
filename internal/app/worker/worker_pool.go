@@ -8,34 +8,32 @@ import (
 )
 
 type WorkerPool struct {
-	workers     []*Worker
-	retryWorker *RetryWorker
+	workers      []*Worker
+	retryWorkers []*RetryWorker
 }
 
 func NewWorkerPool(workersCount int, events chan *models.Payment, paymentService *payment.PaymentService, storageService *storage.StorageService) *WorkerPool {
-	retryEvents := make(chan *RetryEvent, 1000)
+	retryEvents := make(chan *RetryEvent, 10000)
 
-	var workers []*Worker
+	var (
+		workers      []*Worker
+		retryWorkers []*RetryWorker
+	)
 	for id := range workersCount {
-		workers = append(workers, &Worker{
-			id:             id,
-			events:         events,
-			retryEvents:    retryEvents,
-			paymentService: paymentService,
-			storageService: storageService,
-		})
+		workers = append(workers, NewWorker(id, events, retryEvents, paymentService, storageService))
+		retryWorkers = append(retryWorkers, NewRetryWorker(id, retryEvents, paymentService, storageService))
 	}
 
-	retryWorker := NewRetryWorker(99, retryEvents, paymentService, storageService)
-
 	return &WorkerPool{
-		workers:     workers,
-		retryWorker: retryWorker,
+		workers:      workers,
+		retryWorkers: retryWorkers,
 	}
 }
 
 func (w *WorkerPool) StartWorkers(ctx context.Context) {
-	go w.retryWorker.Start(ctx)
+	for _, retryWorker := range w.retryWorkers {
+		go retryWorker.StartWork(ctx)
+	}
 
 	for _, worker := range w.workers {
 		go worker.StartWork(ctx)

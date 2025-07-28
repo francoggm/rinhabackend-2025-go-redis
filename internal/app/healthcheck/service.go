@@ -135,8 +135,7 @@ func (s *HealthCheckService) performChecksAndUpdate(ctx context.Context) {
 }
 
 func (s *HealthCheckService) checkHealth(url string) (*models.HealthCheck, error) {
-	req := fasthttp.AcquireRequest()
-	resp := fasthttp.AcquireResponse()
+	req, resp := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
 	defer func() {
 		fasthttp.ReleaseRequest(req)
 		fasthttp.ReleaseResponse(resp)
